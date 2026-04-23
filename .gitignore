@@ -1,0 +1,25 @@
+# Nuxt
+.nuxt
+.output
+dist
+.env
+
+# Node
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+
+# Build/Dev tools
+.vinxi
+routeTree.gen.ts
+src/routeTree.gen.ts
