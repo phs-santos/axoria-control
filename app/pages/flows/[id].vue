@@ -17,8 +17,16 @@ import { flowsService, type WebhookFlow, type FlowStep } from '~/services/flows.
 const route = useRoute()
 const flowId = route.params.id as string
 
+interface EditableFlowStep extends Omit<FlowStep, 'headers' | 'responseMapping' | 'body'> {
+	headers: string
+	responseMapping: string
+	body: string
+	condition: string
+}
+
 const flow = ref<WebhookFlow | null>(null)
-const steps = ref<FlowStep[]>([])
+const steps = ref<EditableFlowStep[]>([])
+const stepsToDelete = ref<string[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const executing = ref(false)
@@ -26,13 +34,20 @@ const executing = ref(false)
 const fetchFlowData = async () => {
 	loading.value = true
 	try {
-		// Buscamos os detalhes do fluxo e os passos em paralelo
 		const [flowData, stepsData] = await Promise.all([
 			flowsService.getById(flowId),
 			flowsService.getSteps(flowId)
 		])
 		flow.value = flowData
-		steps.value = stepsData.sort((a, b) => a.order - b.order)
+		// Garantir que body, headers e mapping sejam strings para o editor se necessário, 
+		// ou lidar com eles como objetos e usar JSON.stringify no v-model
+		steps.value = stepsData.sort((a, b) => a.order - b.order).map(s => ({
+			...s,
+			body: typeof s.body === 'object' ? JSON.stringify(s.body, null, 2) : s.body || "",
+			headers: typeof s.headers === 'object' ? JSON.stringify(s.headers, null, 2) : JSON.stringify({}, null, 2),
+			responseMapping: typeof s.responseMapping === 'object' ? JSON.stringify(s.responseMapping, null, 2) : JSON.stringify({}, null, 2),
+			condition: s.condition || ""
+		}))
 	} catch (err) {
 		toast.error("Falha ao carregar dados do fluxo")
 		navigateTo('/flows')
@@ -47,14 +62,19 @@ const addNewStep = () => {
 		order: maxOrder + 1,
 		method: "POST",
 		url: "",
-		headers: {},
-		body: null,
-		responseMapping: {},
+		headers: JSON.stringify({}, null, 2),
+		body: "",
+		responseMapping: JSON.stringify({}, null, 2),
+		condition: "",
 		stopOnFailure: false
 	})
 }
 
 const removeStep = (index: number) => {
+	const step = steps.value[index]
+	if (step && step.id) {
+		stepsToDelete.value.push(step.id)
+	}
 	steps.value.splice(index, 1)
 	steps.value.forEach((s, i) => s.order = i + 1)
 }
@@ -62,16 +82,34 @@ const removeStep = (index: number) => {
 const saveChanges = async () => {
 	saving.value = true
 	try {
+		// 1. Remover passos excluídos
+		for (const id of stepsToDelete.value) {
+			await flowsService.deleteStep(flowId, id)
+		}
+		stepsToDelete.value = []
+
+		// 2. Salvar/Atualizar passos
 		for (const step of steps.value) {
-			if (!step.id) {
-				await flowsService.addStep(flowId, step)
+			const payload = {
+				...step,
+				body: step.body ? JSON.parse(step.body as string) : null,
+				headers: step.headers ? JSON.parse(step.headers as string) : {},
+				responseMapping: step.responseMapping ? JSON.parse(step.responseMapping as string) : {},
+				condition: step.condition || undefined
+			}
+
+			if (step.id) {
+				await flowsService.updateStep(flowId, step.id, payload)
+			} else {
+				await flowsService.addStep(flowId, payload as FlowStep)
 			}
 		}
 
 		toast.success("Fluxo sincronizado com sucesso")
-		fetchFlowData()
-	} catch (err) {
-		toast.error("Erro ao salvar alterações")
+		await fetchFlowData()
+	} catch (err: any) {
+		console.error(err)
+		toast.error("Erro ao salvar: " + (err.message || "Erro desconhecido"))
 	} finally {
 		saving.value = false
 	}
@@ -175,6 +213,19 @@ onMounted(fetchFlowData)
 					</div>
 
 					<div class="p-6 grid gap-6 md:grid-cols-12">
+						<!-- Execution Condition -->
+						<div class="md:col-span-12">
+							<label class="text-[10px] font-bold uppercase text-muted-foreground mb-1.5 flex items-center justify-between">
+								<span>Condição de Execução (Opcional)</span>
+								<span class="text-[9px] italic font-normal normal-case">Ex: vars.status === 'ok' ou now.hour > 8</span>
+							</label>
+							<div class="relative">
+								<input v-model="step.condition" placeholder="Deixe vazio para sempre executar"
+									class="flex h-9 w-full rounded-md border border-input bg-muted/30 px-3 py-1 text-xs shadow-sm outline-none focus:ring-1 focus:ring-ring pl-8 font-mono" />
+								<Zap class="absolute left-2.5 top-2.5 h-4 w-4 text-primary/50" />
+							</div>
+						</div>
+
 						<!-- URL and Method -->
 						<div class="md:col-span-2">
 							<label
@@ -198,8 +249,18 @@ onMounted(fetchFlowData)
 							</div>
 						</div>
 
+						<!-- Headers Editor -->
+						<div class="md:col-span-4">
+							<label class="text-[10px] font-bold uppercase text-muted-foreground mb-1.5 block">Headers (JSON)</label>
+							<div class="relative group/editor">
+								<textarea v-model="step.headers" placeholder='{ "Authorization": "Bearer {{token}}" }' rows="6"
+									class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono shadow-sm outline-none focus:ring-1 focus:ring-ring resize-none" />
+								<Code2 class="absolute right-2 top-2 h-3 w-3 text-muted-foreground opacity-30" />
+							</div>
+						</div>
+
 						<!-- Body Editor -->
-						<div class="md:col-span-7">
+						<div class="md:col-span-8">
 							<div class="flex items-center justify-between mb-1.5">
 								<label class="text-[10px] font-bold uppercase text-muted-foreground block">JSON
 									Body</label>
@@ -213,12 +274,12 @@ onMounted(fetchFlowData)
 						</div>
 
 						<!-- Response Mapping -->
-						<div class="md:col-span-5">
+						<div class="md:col-span-12">
 							<label class="text-[10px] font-bold uppercase text-muted-foreground mb-1.5 block">Mapeamento
-								de Resposta</label>
+								de Resposta (JSON)</label>
 							<div class="space-y-4">
-								<textarea placeholder='{ "var_nome": "data.user.name" }' rows="4"
-									class="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono shadow-sm outline-none focus:ring-1 focus:ring-ring" />
+								<textarea v-model="step.responseMapping" placeholder='{ "var_nome": "data.user.name" }' rows="3"
+									class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono shadow-sm outline-none focus:ring-1 focus:ring-ring" />
 								<div class="flex items-center gap-2 px-1">
 									<input type="checkbox" v-model="step.stopOnFailure"
 										class="rounded border-input text-primary focus:ring-primary" />

@@ -6,6 +6,10 @@ export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
   devtools: { enabled: true },
 
+  devServer: {
+    port: 3002 // Substitua pela porta desejada (ex: 8080)
+  },
+
   // Nuxt 4 structure
   future: {
     compatibilityVersion: 4,

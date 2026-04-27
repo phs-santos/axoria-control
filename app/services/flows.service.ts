@@ -8,6 +8,7 @@ export interface FlowStep {
 	headers?: Record<string, string>
 	body?: any
 	responseMapping?: Record<string, string>
+	condition?: string
 	stopOnFailure?: boolean
 }
 
@@ -40,6 +41,13 @@ export const flowsService = {
 		})
 	},
 
+	async update(id: string, data: Partial<WebhookFlow>) {
+		return await api<WebhookFlow>(`/webhook-flows/${id}`, {
+			method: "PATCH",
+			body: data
+		})
+	},
+
 	async delete(id: string) {
 		return await api(`/webhook-flows/${id}`, { method: "DELETE" })
 	},
@@ -59,6 +67,19 @@ export const flowsService = {
 		return await api(`/webhook-flows/${flowId}/steps`, {
 			method: "POST",
 			body: step
+		})
+	},
+
+	async updateStep(flowId: string, stepId: string, step: Partial<FlowStep>) {
+		return await api(`/webhook-flows/${flowId}/steps/${stepId}`, {
+			method: "PATCH",
+			body: step
+		})
+	},
+
+	async deleteStep(flowId: string, stepId: string) {
+		return await api(`/webhook-flows/${flowId}/steps/${stepId}`, {
+			method: "DELETE"
 		})
 	}
 }
