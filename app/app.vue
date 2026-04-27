@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { Toaster } from 'vue-sonner'
 
+// Iniciar escuta em tempo real do Telegram
+useTelegramSocket()
+
 // Head metadata from __root.tsx
 useHead({
   title: 'Axoria — Painel Admin',

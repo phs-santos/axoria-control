@@ -18,5 +18,9 @@ export const remindersService = {
 
 	async getById(id: string) {
 		return await api(`/reminders/${id}`)
+	},
+	
+	async getAll() {
+		return await api<any[]>("/reminders")
 	}
 }

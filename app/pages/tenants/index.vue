@@ -10,6 +10,9 @@ import {
   Loader2,
   Settings
 } from 'lucide-vue-next'
+import {
+  DialogRoot, DialogPortal, DialogOverlay, DialogContent, DialogTitle
+} from 'radix-vue'
 import { toast } from 'vue-sonner'
 import Button from '~/components/ui/Button.vue'
 import { tenantsService, type Tenant } from '~/services/tenants.service'
@@ -84,7 +87,16 @@ onMounted(fetchTenants)
     </div>
 
     <div v-else class="grid gap-6">
+      <div v-if="tenants.length === 0" class="col-span-full py-20 text-center border-2 border-dashed rounded-3xl bg-muted/20">
+        <div class="h-16 w-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4 opacity-50">
+          <Building2 class="h-8 w-8" />
+        </div>
+        <h3 class="text-xl font-bold">Nenhuma empresa cadastrada</h3>
+        <p class="text-muted-foreground max-w-xs mx-auto mt-2">Você ainda não registrou nenhuma empresa (tenant) no sistema.</p>
+      </div>
+
       <div 
+        v-else
         v-for="tenant in tenants" 
         :key="tenant.id"
         class="group relative rounded-xl border bg-card p-6 shadow-sm transition-all hover:shadow-md"
@@ -137,52 +149,56 @@ onMounted(fetchTenants)
     </div>
 
     <!-- Create Modal -->
-    <div v-if="showCreate" class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
-      <div class="w-full max-w-md rounded-xl border bg-card p-6 shadow-lg animate-in fade-in zoom-in duration-200">
-        <h2 class="text-xl font-bold mb-1 text-foreground">Registrar Nova Empresa</h2>
-        <p class="text-sm text-muted-foreground mb-6">Configure o nome e a identificação única do tenant.</p>
-        
-        <form @submit.prevent="createTenant" class="space-y-4">
-          <div class="space-y-2">
-            <label class="text-sm font-medium">Nome Fantasia</label>
-            <input 
-              v-model="newTenant.name"
-              placeholder="Ex: Axoria Tech Ltda"
-              required
-              class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-          </div>
-          <div class="space-y-2">
-            <label class="text-sm font-medium">Slug (URL ID)</label>
-            <input 
-              v-model="newTenant.slug"
-              placeholder="ex: axoria-tech"
-              required
-              class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-          </div>
+    <DialogRoot v-model:open="showCreate">
+      <DialogPortal>
+        <DialogOverlay class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
+        <DialogContent
+          class="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-card p-6 shadow-lg outline-none animate-in fade-in zoom-in duration-200">
+          <DialogTitle class="text-xl font-bold mb-1 text-foreground">Registrar Nova Empresa</DialogTitle>
+          <p class="text-sm text-muted-foreground mb-6">Configure o nome e a identificação única do tenant.</p>
           
-          <div class="grid grid-cols-2 gap-4 pt-2">
-            <div class="col-span-2 text-xs font-bold uppercase text-muted-foreground mb-1">Plano Inicial</div>
-            <div class="border rounded-md p-3 cursor-pointer hover:bg-muted/50 border-primary bg-primary/5">
-              <div class="font-bold text-sm">Standard</div>
-              <div class="text-[10px] text-muted-foreground">5 Users · 3 Keys</div>
+          <form @submit.prevent="createTenant" class="space-y-4">
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Nome Fantasia</label>
+              <input 
+                v-model="newTenant.name"
+                placeholder="Ex: Axoria Tech Ltda"
+                required
+                class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
             </div>
-            <div class="border rounded-md p-3 cursor-pointer hover:bg-muted/50">
-              <div class="font-bold text-sm">Enterprise</div>
-              <div class="text-[10px] text-muted-foreground">Ilimitado · 50 Keys</div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Slug (URL ID)</label>
+              <input 
+                v-model="newTenant.slug"
+                placeholder="ex: axoria-tech"
+                required
+                class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
             </div>
-          </div>
+            
+            <div class="grid grid-cols-2 gap-4 pt-2">
+              <div class="col-span-2 text-xs font-bold uppercase text-muted-foreground mb-1">Plano Inicial</div>
+              <div class="border rounded-md p-3 cursor-pointer hover:bg-muted/50 border-primary bg-primary/5">
+                <div class="font-bold text-sm">Standard</div>
+                <div class="text-[10px] text-muted-foreground">5 Users · 3 Keys</div>
+              </div>
+              <div class="border rounded-md p-3 cursor-pointer hover:bg-muted/50">
+                <div class="font-bold text-sm">Enterprise</div>
+                <div class="text-[10px] text-muted-foreground">Ilimitado · 50 Keys</div>
+              </div>
+            </div>
 
-          <div class="flex justify-end gap-3 pt-4 border-t mt-6">
-            <Button variant="ghost" type="button" @click="showCreate = false">Cancelar</Button>
-            <Button type="submit" :disabled="creating">
-              <Loader2 v-if="creating" class="mr-2 h-4 w-4 animate-spin" />
-              Cadastrar Empresa
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+            <div class="flex justify-end gap-3 pt-4 border-t mt-6">
+              <Button variant="ghost" type="button" @click="showCreate = false">Cancelar</Button>
+              <Button type="submit" :disabled="creating">
+                <Loader2 v-if="creating" class="mr-2 h-4 w-4 animate-spin" />
+                Cadastrar Empresa
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </DialogPortal>
+    </DialogRoot>
   </div>
 </template>
