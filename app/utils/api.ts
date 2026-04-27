@@ -1,8 +1,8 @@
 // API client for https://services.axoria.digital/api/
 // Supports JWT (Bearer token from login)
 
-// export const API_BASE_URL = "https://services.axoria.digital/api";
-export const API_BASE_URL = "http://localhost:3000/api";
+export const API_BASE_URL = "https://services.axoria.digital/api";
+// export const API_BASE_URL = "http://localhost:3000/api";
 
 const TOKEN_KEY = "axoria.auth.token";
 const USER_KEY = "axoria.auth.user";
