@@ -1,177 +1,203 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { HardDrive, Upload, Loader2, Trash2, File as FileIcon, Eye, X, Image as ImageIcon } from 'lucide-vue-next'
+import { ref, computed } from 'vue'
+import { 
+    HardDrive, 
+    Upload, 
+    Search, 
+    MoreVertical, 
+    FileText, 
+    Image as ImageIcon, 
+    File as FileIcon, 
+    Trash2, 
+    Download, 
+    Copy,
+    Loader2,
+    Grid,
+    List,
+    ExternalLink
+} from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import Button from '~/components/ui/Button.vue'
 import { storageService, type StorageFile } from '~/services/storage.service'
 
-const files = ref<StorageFile[]>([])
-const loading = ref(true)
+const viewMode = ref<'grid' | 'list'>('grid')
+const searchQuery = ref('')
 const uploading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
-const isPreviewOpen = ref(false)
-const previewUrl = ref("")
 
-const openPreview = (url: string) => {
-	previewUrl.value = url
-	isPreviewOpen.value = true
-}
+const { data: files, refresh, pending } = useAsyncData('storage-files', () => storageService.getAll())
 
-const closePreview = () => {
-	isPreviewOpen.value = false
-	previewUrl.value = ""
-}
+const filteredFiles = computed(() => {
+    if (!files.value) return []
+    if (!searchQuery.value) return files.value
+    return files.value.filter(f => f.originalName.toLowerCase().includes(searchQuery.value.toLowerCase()))
+})
 
-const fetchFiles = async () => {
-	loading.value = true
-	try {
-		files.value = await storageService.list()
-	} catch (err) {
-		toast.error("Falha ao carregar arquivos")
-	} finally {
-		loading.value = false
-	}
-}
+const handleUpload = async (event: Event) => {
+    const target = event.target as HTMLInputElement
+    if (!target.files?.length) return
 
-const triggerUpload = () => {
-	fileInput.value?.click()
-}
-
-const handleFileUpload = async (event: Event) => {
-	const target = event.target as HTMLInputElement
-	if (!target.files?.length) return
-	
-	const file = target.files[0]
-	if (!file) return
-	uploading.value = true
-	
-	try {
-		await storageService.upload(file)
-		toast.success("Arquivo enviado com sucesso!")
-		await fetchFiles()
-	} catch (err) {
-		toast.error("Erro ao enviar arquivo")
-	} finally {
-		uploading.value = false
-		target.value = '' // reset input
-	}
+    uploading.value = true
+    try {
+        for (const file of Array.from(target.files)) {
+            await storageService.upload(file)
+        }
+        toast.success("Upload concluído")
+        refresh()
+    } catch (err) {
+        toast.error("Falha ao enviar arquivo")
+    } finally {
+        uploading.value = false
+        if (fileInput.value) fileInput.value.value = ''
+    }
 }
 
 const deleteFile = async (id: string) => {
-	if (!confirm("Tem certeza que deseja excluir este arquivo?")) return
-	
-	try {
-		await storageService.remove(id)
-		toast.success("Arquivo excluído")
-		await fetchFiles()
-	} catch (err) {
-		toast.error("Erro ao excluir arquivo")
-	}
+    if (!confirm("Tem certeza que deseja excluir este arquivo?")) return
+    
+    try {
+        await storageService.delete(id)
+        toast.success("Arquivo excluído")
+        refresh()
+    } catch (err) {
+        toast.error("Falha ao excluir arquivo")
+    }
 }
 
-const formatBytes = (bytes: number, decimals = 2) => {
-    if (!+bytes) return '0 Bytes'
+const copyLink = (url: string) => {
+    navigator.clipboard.writeText(url)
+    toast.success("Link copiado para a área de transferência")
+}
+
+const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 B'
     const k = 1024
-    const dm = decimals < 0 ? 0 : decimals
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
+    const sizes = ['B', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-onMounted(fetchFiles)
+const getFileIcon = (mime: string) => {
+    if (mime.startsWith('image/')) return ImageIcon
+    if (mime.includes('pdf') || mime.includes('text')) return FileText
+    return FileIcon
+}
 </script>
 
 <template>
-	<div class="space-y-6">
-		<div class="flex items-center justify-between">
-			<div>
-				<h1 class="text-2xl font-bold tracking-tight">Arquivos (Storage)</h1>
-				<p class="text-muted-foreground">Gerencie os arquivos da sua empresa.</p>
-			</div>
-			
-			<div class="flex items-center gap-2">
-				<input type="file" ref="fileInput" class="hidden" @change="handleFileUpload" />
-				<Button @click="triggerUpload" :disabled="uploading">
-					<Loader2 v-if="uploading" class="mr-2 h-4 w-4 animate-spin" />
-					<Upload v-else class="mr-2 h-4 w-4" />
-					Fazer Upload
-				</Button>
-			</div>
-		</div>
+    <div class="space-y-6">
+        <!-- Header -->
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+                <h1 class="text-2xl font-bold tracking-tight">Armazenamento</h1>
+                <p class="text-muted-foreground">Gerencie seus arquivos, assets e uploads.</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <input type="file" ref="fileInput" class="hidden" multiple @change="handleUpload" />
+                <Button @click="fileInput?.click()" :disabled="uploading">
+                    <Loader2 v-if="uploading" class="mr-2 h-4 w-4 animate-spin" />
+                    <Upload v-else class="mr-2 h-4 w-4" />
+                    Fazer Upload
+                </Button>
+            </div>
+        </div>
 
-		<div class="rounded-xl border bg-card text-card-foreground shadow-sm">
-			<div class="relative w-full overflow-auto">
-				<table class="w-full caption-bottom text-sm">
-					<thead class="[&_tr]:border-b bg-muted/50">
-						<tr class="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-							<th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Arquivo</th>
-							<th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Tamanho</th>
-							<th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Data de Envio</th>
-							<th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Link</th>
-							<th class="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Ações</th>
-						</tr>
-					</thead>
-					<tbody class="[&_tr:last-child]:border-0">
-						<tr v-if="loading" class="border-b transition-colors">
-							<td colspan="5" class="p-8 text-center text-muted-foreground">
-								<Loader2 class="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
-								Carregando arquivos...
-							</td>
-						</tr>
-						<tr v-else-if="files.length === 0" class="border-b transition-colors">
-							<td colspan="5" class="p-12 text-center text-muted-foreground">
-								<HardDrive class="h-10 w-10 mx-auto mb-4 opacity-20" />
-								Nenhum arquivo encontrado.
-							</td>
-						</tr>
-						<tr v-else v-for="file in files" :key="file.id"
-							class="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-							<td class="p-4 align-middle">
-								<div class="flex items-center gap-3">
-									<div class="p-2 bg-primary/10 rounded-lg">
-										<ImageIcon v-if="file.mimeType?.startsWith('image/')" class="h-4 w-4 text-primary" />
-										<FileIcon v-else class="h-4 w-4 text-primary" />
-									</div>
-									<div class="flex flex-col">
-										<span class="font-medium truncate max-w-[200px]" :title="file.originalName">{{ file.originalName }}</span>
-										<span class="text-xs text-muted-foreground font-mono truncate max-w-[200px]" :title="file.fileName">{{ file.fileName }}</span>
-									</div>
-								</div>
-							</td>
-							<td class="p-4 align-middle font-mono text-xs">{{ formatBytes(file.size) }}</td>
-							<td class="p-4 align-middle text-xs">{{ new Date(file.createdAt).toLocaleString('pt-BR') }}</td>
-							<td class="p-4 align-middle">
-								<a :href="file.url" target="_blank" class="text-xs text-primary hover:underline truncate max-w-[150px] inline-block" :title="file.url">
-									{{ file.url }}
-								</a>
-							</td>
-							<td class="p-4 align-middle text-right">
-								<Button v-if="file.mimeType?.startsWith('image/')" variant="ghost" size="icon" class="h-8 w-8 text-primary hover:text-primary/90 hover:bg-primary/10 mr-1" @click="openPreview(file.url)" title="Visualizar">
-									<Eye class="h-4 w-4" />
-								</Button>
-								<Button variant="ghost" size="icon" class="h-8 w-8 text-destructive hover:text-destructive/90 hover:bg-destructive/10" @click="deleteFile(file.id)" title="Excluir">
-									<Trash2 class="h-4 w-4" />
-								</Button>
-							</td>
-						</tr>
-					</tbody>
-				</table>
-			</div>
-		</div>
-		
-		<!-- Modal de Preview -->
-		<div v-if="isPreviewOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" @click.self="closePreview">
-			<div class="relative bg-background rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-				<div class="flex items-center justify-between p-4 border-b">
-					<h3 class="font-semibold tracking-tight">Visualização da Imagem</h3>
-					<Button variant="ghost" size="icon" class="h-8 w-8 rounded-full hover:bg-muted" @click="closePreview">
-						<X class="h-4 w-4" />
-					</Button>
-				</div>
-				<div class="p-4 overflow-auto flex-1 flex items-center justify-center bg-muted/20">
-					<img :src="previewUrl" class="max-w-full max-h-[70vh] object-contain rounded-lg shadow-sm" />
-				</div>
-			</div>
-		</div>
-	</div>
+        <!-- Controls -->
+        <div class="flex items-center justify-between gap-4 p-4 rounded-xl border bg-card shadow-sm">
+            <div class="relative flex-1 max-w-md">
+                <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input v-model="searchQuery" placeholder="Pesquisar arquivos..." 
+                    class="w-full bg-muted/50 border rounded-lg pl-10 pr-4 py-2 text-sm outline-none focus:ring-1 focus:ring-primary transition-all" />
+            </div>
+            <div class="flex border rounded-lg overflow-hidden shrink-0">
+                <button @click="viewMode = 'grid'" :class="viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'bg-background'" class="p-2 transition-colors">
+                    <Grid class="h-4 w-4" />
+                </button>
+                <button @click="viewMode = 'list'" :class="viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'bg-background'" class="p-2 transition-colors">
+                    <List class="h-4 w-4" />
+                </button>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div v-if="pending" class="flex items-center justify-center py-20">
+            <Loader2 class="h-8 w-8 animate-spin text-primary" />
+        </div>
+
+        <div v-else-if="!filteredFiles.length" class="py-20 text-center border-2 border-dashed rounded-3xl bg-muted/10">
+            <div class="h-16 w-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4 opacity-50">
+                <HardDrive class="h-8 w-8" />
+            </div>
+            <h3 class="text-xl font-bold">Nenhum arquivo encontrado</h3>
+            <p class="text-muted-foreground max-w-xs mx-auto mt-2">Faça upload de arquivos para começar a gerenciar seus assets.</p>
+        </div>
+
+        <!-- GRID VIEW -->
+        <div v-else-if="viewMode === 'grid'" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div v-for="file in filteredFiles" :key="file.id" 
+                class="group relative rounded-xl border bg-card hover:bg-muted/50 transition-all overflow-hidden flex flex-col shadow-sm hover:shadow-md">
+                
+                <!-- Preview Area -->
+                <div class="aspect-square bg-muted/30 flex items-center justify-center relative overflow-hidden border-b">
+                    <img v-if="file.mimeType.startsWith('image/')" :src="file.url" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                    <component v-else :is="getFileIcon(file.mimeType)" class="h-10 w-10 text-muted-foreground opacity-40" />
+                    
+                    <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <button @click="copyLink(file.url)" class="p-2 bg-white rounded-full text-black hover:bg-primary hover:text-white transition-colors" title="Copiar Link">
+                            <Copy class="h-4 w-4" />
+                        </button>
+                        <a :href="file.url" target="_blank" class="p-2 bg-white rounded-full text-black hover:bg-primary hover:text-white transition-colors" title="Visualizar">
+                            <ExternalLink class="h-4 w-4" />
+                        </a>
+                        <button @click="deleteFile(file.id)" class="p-2 bg-white rounded-full text-destructive hover:bg-destructive hover:text-white transition-colors" title="Excluir">
+                            <Trash2 class="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-3">
+                    <p class="text-xs font-bold truncate mb-0.5" :title="file.originalName">{{ file.originalName }}</p>
+                    <p class="text-[10px] text-muted-foreground">{{ formatSize(file.size) }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- LIST VIEW -->
+        <div v-else class="rounded-xl border bg-card overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <table class="w-full text-sm">
+                <thead class="border-b bg-muted/50 text-left">
+                    <tr>
+                        <th class="px-4 py-3 font-medium text-muted-foreground">Nome</th>
+                        <th class="px-4 py-3 font-medium text-muted-foreground">Tipo</th>
+                        <th class="px-4 py-3 font-medium text-muted-foreground">Tamanho</th>
+                        <th class="px-4 py-3 font-medium text-muted-foreground">Data</th>
+                        <th class="px-4 py-3 text-right font-medium text-muted-foreground">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    <tr v-for="file in filteredFiles" :key="file.id" class="hover:bg-muted/30 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-3">
+                                <component :is="getFileIcon(file.mimeType)" class="h-4 w-4 text-primary" />
+                                <span class="font-medium truncate max-w-[200px] md:max-w-md" :title="file.originalName">{{ file.originalName }}</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 text-xs text-muted-foreground">{{ file.mimeType }}</td>
+                        <td class="px-4 py-3 text-xs text-muted-foreground">{{ formatSize(file.size) }}</td>
+                        <td class="px-4 py-3 text-xs text-muted-foreground">{{ new Date(file.createdAt).toLocaleDateString() }}</td>
+                        <td class="px-4 py-3 text-right">
+                            <div class="flex items-center justify-end gap-1">
+                                <Button variant="ghost" size="icon" class="h-8 w-8" @click="copyLink(file.url)">
+                                    <Copy class="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" class="h-8 w-8" @click="deleteFile(file.id)">
+                                    <Trash2 class="h-4 w-4 text-destructive" />
+                                </Button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </template>

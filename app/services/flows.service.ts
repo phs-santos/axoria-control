@@ -82,5 +82,22 @@ export const flowsService = {
 		return await api(`/webhook-flows/${flowId}/steps/${stepId}`, {
 			method: "DELETE"
 		})
+	},
+
+	async getSchedules(flowId: string) {
+		return await api<any[]>(`/webhook-flows/${flowId}/schedules`)
+	},
+
+	async createSchedule(flowId: string, data: any) {
+		return await api(`/webhook-flows/${flowId}/schedules`, {
+			method: "POST",
+			body: data
+		})
+	},
+
+	async deleteSchedule(flowId: string, scheduleId: string) {
+		return await api(`/webhook-flows/${flowId}/schedules/${scheduleId}`, {
+			method: "DELETE"
+		})
 	}
 }
