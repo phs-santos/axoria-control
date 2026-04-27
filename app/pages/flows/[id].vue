@@ -8,9 +8,15 @@ import {
 	Play,
 	Zap,
 	Globe,
-	Code2
+	Code2,
+	Layout
 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
+import { VueFlow, useVueFlow } from '@vue-flow/core'
+import { Background } from '@vue-flow/background'
+import { Controls } from '@vue-flow/controls'
+import '@vue-flow/core/dist/style.css'
+import '@vue-flow/core/dist/theme-default.css'
 import Button from '~/components/ui/Button.vue'
 import { flowsService, type WebhookFlow, type FlowStep } from '~/services/flows.service'
 
@@ -30,6 +36,11 @@ const stepsToDelete = ref<string[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const executing = ref(false)
+const viewMode = ref<'list' | 'visual'>('list')
+
+const { onConnect, addEdges, onNodeDragStop } = useVueFlow()
+const nodes = ref<any[]>([])
+const edges = ref<any[]>([])
 
 const fetchFlowData = async () => {
 	loading.value = true
@@ -48,12 +59,42 @@ const fetchFlowData = async () => {
 			responseMapping: typeof s.responseMapping === 'object' ? JSON.stringify(s.responseMapping, null, 2) : JSON.stringify({}, null, 2),
 			condition: s.condition || ""
 		}))
+
+		// Sync with Visual Flow
+		syncToGraph()
 	} catch (err) {
 		toast.error("Falha ao carregar dados do fluxo")
 		navigateTo('/flows')
 	} finally {
 		loading.value = false
 	}
+}
+
+const syncToGraph = () => {
+	const layout = (flow.value as any)?.visualLayout || {}
+	nodes.value = steps.value.map((step, index) => ({
+		id: step.id || `temp-${index}`,
+		label: `${step.order}. ${step.method} ${step.url.split('/').pop() || 'Request'}`,
+		position: layout[step.id || `temp-${index}`]?.position || { x: 250, y: index * 100 + 50 },
+		data: { stepIndex: index }
+	}))
+
+	edges.value = []
+	for (let i = 0; i < nodes.value.length - 1; i++) {
+		edges.value.push({
+			id: `e${i}-${i + 1}`,
+			source: nodes.value[i].id,
+			target: nodes.value[i + 1].id,
+			animated: true
+		})
+	}
+}
+
+const handleNodeDrag = (event: any) => {
+	if (!flow.value) return
+	const { node } = event
+	if (!flow.value.visualLayout) (flow.value as any).visualLayout = {}
+		; (flow.value as any).visualLayout[node.id] = { position: node.position }
 }
 
 const addNewStep = () => {
@@ -106,6 +147,12 @@ const saveChanges = async () => {
 		}
 
 		toast.success("Fluxo sincronizado com sucesso")
+
+		// Salvar Layout Visual
+		if (flow.value && (flow.value as any).visualLayout) {
+			await flowsService.update(flowId, { visualLayout: (flow.value as any).visualLayout })
+		}
+
 		await fetchFlowData()
 	} catch (err: any) {
 		console.error(err)
@@ -161,25 +208,46 @@ onMounted(fetchFlowData)
 					</div>
 				</div>
 			</div>
-			<div class="flex items-center gap-2">
-				<Button variant="outline" @click="testFlow" :disabled="executing">
-					<Loader2 v-if="executing" class="mr-2 h-4 w-4 animate-spin" />
-					<Play v-else class="mr-2 h-4 w-4 text-green-500" />
-					Testar
-				</Button>
-				<Button @click="saveChanges" :disabled="saving">
-					<Loader2 v-if="saving" class="mr-2 h-4 w-4 animate-spin" />
-					<Save v-else class="mr-2 h-4 w-4" />
-					Salvar
-				</Button>
+			<div class="flex border rounded-lg overflow-hidden h-9">
+				<button @click="viewMode = 'list'"
+					:class="viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground'"
+					class="px-3 text-xs font-medium transition-colors">
+					Lista
+				</button>
+				<button @click="viewMode = 'visual'"
+					:class="viewMode === 'visual' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground'"
+					class="px-3 text-xs font-medium transition-colors">
+					Visual
+				</button>
+			</div>
+			<Button @click="saveChanges" :disabled="saving">
+				<Loader2 v-if="saving" class="mr-2 h-4 w-4 animate-spin" />
+				<Save v-else class="mr-2 h-4 w-4" />
+				Salvar
+			</Button>
+		</div>
+	</div>
+
+	<div v-if="loading" class="flex items-center justify-center py-20">
+		<Loader2 class="h-8 w-8 animate-spin text-primary" />
+	</div>
+
+	<div v-else class="space-y-4 h-[calc(100vh-250px)]">
+		<!-- Visual View -->
+		<div v-if="viewMode === 'visual'" class="h-full border rounded-xl bg-muted/5 overflow-hidden relative">
+			<VueFlow v-model:nodes="nodes" v-model:edges="edges" @node-drag-stop="handleNodeDrag"
+				:fit-view-on-init="true">
+				<Background />
+				<Controls />
+			</VueFlow>
+			<div
+				class="absolute bottom-4 right-4 z-10 bg-background/80 backdrop-blur border rounded-lg p-3 text-[10px] text-muted-foreground shadow-sm">
+				Dica: Arraste os nós para organizar seu fluxo visualmente.
 			</div>
 		</div>
 
-		<div v-if="loading" class="flex items-center justify-center py-20">
-			<Loader2 class="h-8 w-8 animate-spin text-primary" />
-		</div>
-
-		<div v-else class="space-y-4">
+		<!-- List View -->
+		<div v-else class="space-y-4 overflow-y-auto pr-2">
 			<!-- Steps List -->
 			<div v-if="steps.length === 0" class="text-center py-16 border-2 border-dashed rounded-xl bg-muted/10">
 				<Globe class="h-10 w-10 text-muted-foreground mx-auto mb-4 opacity-20" />
@@ -215,9 +283,11 @@ onMounted(fetchFlowData)
 					<div class="p-6 grid gap-6 md:grid-cols-12">
 						<!-- Execution Condition -->
 						<div class="md:col-span-12">
-							<label class="text-[10px] font-bold uppercase text-muted-foreground mb-1.5 flex items-center justify-between">
+							<label
+								class="text-[10px] font-bold uppercase text-muted-foreground mb-1.5 flex items-center justify-between">
 								<span>Condição de Execução (Opcional)</span>
-								<span class="text-[9px] italic font-normal normal-case">Ex: vars.status === 'ok' ou now.hour > 8</span>
+								<span class="text-[9px] italic font-normal normal-case">Ex: vars.status === 'ok' ou
+									now.hour > 8</span>
 							</label>
 							<div class="relative">
 								<input v-model="step.condition" placeholder="Deixe vazio para sempre executar"
@@ -251,9 +321,11 @@ onMounted(fetchFlowData)
 
 						<!-- Headers Editor -->
 						<div class="md:col-span-4">
-							<label class="text-[10px] font-bold uppercase text-muted-foreground mb-1.5 block">Headers (JSON)</label>
+							<label class="text-[10px] font-bold uppercase text-muted-foreground mb-1.5 block">Headers
+								(JSON)</label>
 							<div class="relative group/editor">
-								<textarea v-model="step.headers" placeholder='{ "Authorization": "Bearer {{token}}" }' rows="6"
+								<textarea v-model="step.headers" placeholder='{ "Authorization": "Bearer {{token}}" }'
+									rows="6"
 									class="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono shadow-sm outline-none focus:ring-1 focus:ring-ring resize-none" />
 								<Code2 class="absolute right-2 top-2 h-3 w-3 text-muted-foreground opacity-30" />
 							</div>
@@ -278,7 +350,8 @@ onMounted(fetchFlowData)
 							<label class="text-[10px] font-bold uppercase text-muted-foreground mb-1.5 block">Mapeamento
 								de Resposta (JSON)</label>
 							<div class="space-y-4">
-								<textarea v-model="step.responseMapping" placeholder='{ "var_nome": "data.user.name" }' rows="3"
+								<textarea v-model="step.responseMapping" placeholder='{ "var_nome": "data.user.name" }'
+									rows="3"
 									class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono shadow-sm outline-none focus:ring-1 focus:ring-ring" />
 								<div class="flex items-center gap-2 px-1">
 									<input type="checkbox" v-model="step.stopOnFailure"

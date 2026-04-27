@@ -6,6 +6,7 @@ import {
 } from 'radix-vue'
 import { toast } from 'vue-sonner'
 import { api, ApiError } from '~/utils/api'
+import { cn } from '~/utils/utils'
 import Button from '~/components/ui/Button.vue'
 
 interface Bot {
@@ -22,8 +23,19 @@ const botForm = ref({ name: "", token: "" })
 const sendForm = ref({ botId: "", chatId: "", message: "" })
 const loadingBot = ref(false)
 const loadingSend = ref(false)
+const selectedBotId = ref<string | null>(null)
 
 const { data: bots, refresh, pending, error } = useAsyncData('telegram-bots', () => api<Bot[]>("/telegram/bots"))
+
+const { data: chats, pending: pendingChats, refresh: refreshChats } = useAsyncData(
+    'telegram-chats',
+    () => selectedBotId.value ? api<any[]>(`/telegram/chats?botId=${selectedBotId.value}`) : Promise.resolve([]),
+    { watch: [selectedBotId] }
+)
+
+const handleViewChats = (botId: string) => {
+    selectedBotId.value = botId
+}
 
 const handleCreateBot = async () => {
     loadingBot.value = true
@@ -147,6 +159,7 @@ const handleSendMessage = async () => {
                         <th class="px-4 py-3 text-left font-medium text-muted-foreground">Username</th>
                         <th class="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
                         <th class="px-4 py-3 text-left font-medium text-muted-foreground">Criado em</th>
+                        <th class="px-4 py-3 text-right font-medium text-muted-foreground">Ações</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
@@ -171,9 +184,60 @@ const handleSendMessage = async () => {
                         <td class="px-4 py-3 text-xs text-muted-foreground">
                             {{ b.createdAt ? new Date(b.createdAt).toLocaleDateString() : "—" }}
                         </td>
+                        <td class="px-4 py-3 text-right">
+                            <Button variant="ghost" size="sm" @click="handleViewChats(b.id)"
+                                :class="cn(selectedBotId === b.id && 'bg-muted')">
+                                Chats
+                            </Button>
+                        </td>
                     </tr>
                 </tbody>
             </table>
+        </div>
+
+        <!-- Chats Section -->
+        <div v-if="selectedBotId" class="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold">Chats do Bot ({{bots?.find(b => b.id === selectedBotId)?.name}})
+                </h2>
+                <Button variant="ghost" size="sm" @click="selectedBotId = null">Fechar</Button>
+            </div>
+
+            <div class="rounded-xl border bg-card overflow-hidden shadow">
+                <table class="w-full text-sm">
+                    <thead class="border-b bg-muted/50">
+                        <tr>
+                            <th class="px-4 py-3 text-left font-medium text-muted-foreground">Chat ID</th>
+                            <th class="px-4 py-3 text-left font-medium text-muted-foreground">Tipo</th>
+                            <th class="px-4 py-3 text-left font-medium text-muted-foreground">Nome/Título</th>
+                            <th class="px-4 py-3 text-left font-medium text-muted-foreground">Username</th>
+                            <th class="px-4 py-3 text-left font-medium text-muted-foreground">Última msg</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-if="pendingChats">
+                            <td colspan="5" class="px-4 py-8 text-center text-muted-foreground">Carregando chats...</td>
+                        </tr>
+                        <tr v-else-if="!chats?.length">
+                            <td colspan="5" class="px-4 py-8 text-center text-muted-foreground">Nenhum chat encontrado
+                                para este bot.</td>
+                        </tr>
+                        <tr v-for="c in chats" :key="c.id" class="hover:bg-muted/50 transition-colors">
+                            <td class="px-4 py-3 font-mono text-xs">{{ c.externalChatId }}</td>
+                            <td class="px-4 py-3">
+                                <span class="capitalize">{{ c.type }}</span>
+                            </td>
+                            <td class="px-4 py-3">
+                                {{ c.title || `${c.firstName || ''} ${c.lastName || ''}`.trim() || '—' }}
+                            </td>
+                            <td class="px-4 py-3 text-muted-foreground">{{ c.username ? `@${c.username}` : "—" }}</td>
+                            <td class="px-4 py-3 text-xs text-muted-foreground">
+                                {{ c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleString() : "—" }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </template>

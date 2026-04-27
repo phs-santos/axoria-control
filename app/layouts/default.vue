@@ -62,7 +62,7 @@ onMounted(() => {
 		</Transition>
 
 		<!-- App Layout (Renderiza apenas quando isReady é true para evitar saltos) -->
-		<div v-if="isReady" class="flex min-h-screen">
+		<div v-show="isReady" class="flex min-h-screen">
 			<!-- Sidebar -->
 			<aside
 				class="hidden md:flex w-64 flex-col border-r bg-card/50 backdrop-blur-xl text-card-foreground fixed h-full z-30">
@@ -94,16 +94,27 @@ onMounted(() => {
 				</nav>
 
 				<div class="mt-auto border-t p-4 space-y-4">
-					<div class="flex items-center gap-3 px-2 py-2">
-						<div
-							class="h-9 w-9 rounded-full bg-linear-to-tr from-primary to-primary/60 flex items-center justify-center text-white font-bold text-xs shadow-md">
-							{{ user?.name?.charAt(0) || 'U' }}
+					<ClientOnly>
+						<div class="flex items-center gap-3 px-2 py-2">
+							<div
+								class="h-9 w-9 rounded-full bg-linear-to-tr from-primary to-primary/60 flex items-center justify-center text-white font-bold text-xs shadow-md">
+								{{ user?.name?.charAt(0) || 'U' }}
+							</div>
+							<div class="min-w-0 flex-1">
+								<p class="text-sm font-bold truncate leading-tight">{{ user?.name || 'Usuário' }}</p>
+								<p class="text-[10px] text-muted-foreground truncate">{{ user?.email }}</p>
+							</div>
 						</div>
-						<div class="min-w-0 flex-1">
-							<p class="text-sm font-bold truncate leading-tight">{{ user?.name || 'Usuário' }}</p>
-							<p class="text-[10px] text-muted-foreground truncate">{{ user?.email }}</p>
-						</div>
-					</div>
+						<template #fallback>
+							<div class="flex items-center gap-3 px-2 py-2 animate-pulse">
+								<div class="h-9 w-9 rounded-full bg-muted"></div>
+								<div class="flex-1 space-y-2">
+									<div class="h-3 w-20 bg-muted rounded"></div>
+									<div class="h-2 w-32 bg-muted rounded"></div>
+								</div>
+							</div>
+						</template>
+					</ClientOnly>
 					<Button variant="ghost"
 						class="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive group"
 						@click="handleLogout">

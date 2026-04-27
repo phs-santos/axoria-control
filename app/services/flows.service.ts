@@ -18,6 +18,7 @@ export interface WebhookFlow {
 	description?: string
 	triggerEvents: string[]
 	isActive: boolean
+	visualLayout?: any
 	stepsCount?: number
 	createdAt?: string
 }
